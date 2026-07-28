@@ -73,9 +73,8 @@ projects:
             runtime: node
             plan: free
             region: oregon
-            rootDir: apps/web
-            buildCommand: npm install && npm run build
-            startCommand: npm run start
+            buildCommand: npm install && NODE_ENV=production npm run build -w apps/web
+            startCommand: NODE_ENV=production npm run start -w apps/web
             autoDeployTrigger: commit
             envVars:
               - key: NODE_ENV
