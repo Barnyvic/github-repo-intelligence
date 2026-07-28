@@ -1,0 +1,18 @@
+export default () => ({
+  NODE_ENV: process.env.NODE_ENV ?? 'development',
+  PORT: Number(process.env.PORT ?? 3000),
+  API_PREFIX: process.env.API_PREFIX ?? 'api/v1',
+  DATABASE_URL: process.env.DATABASE_URL,
+  REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
+  GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+  GITHUB_API_BASE_URL: process.env.GITHUB_API_BASE_URL ?? 'https://api.github.com',
+  GITHUB_TIMEOUT_MS: Number(process.env.GITHUB_TIMEOUT_MS ?? 8000),
+  GITHUB_RETRY_ATTEMPTS: Number(process.env.GITHUB_RETRY_ATTEMPTS ?? 3),
+  CACHE_TTL_REPOSITORY_SEARCH_SECONDS: Number(process.env.CACHE_TTL_REPOSITORY_SEARCH_SECONDS ?? 300),
+  CACHE_TTL_REPOSITORY_DETAILS_SECONDS: Number(process.env.CACHE_TTL_REPOSITORY_DETAILS_SECONDS ?? 900),
+  CACHE_TTL_DEVELOPER_PROFILE_SECONDS: Number(process.env.CACHE_TTL_DEVELOPER_PROFILE_SECONDS ?? 900),
+  CACHE_TTL_REPOSITORY_ACTIVITY_SECONDS: Number(process.env.CACHE_TTL_REPOSITORY_ACTIVITY_SECONDS ?? 300),
+  CORS_ORIGIN: process.env.CORS_ORIGIN ?? '*',
+  THROTTLE_TTL_SECONDS: Number(process.env.THROTTLE_TTL_SECONDS ?? 60),
+  THROTTLE_LIMIT: Number(process.env.THROTTLE_LIMIT ?? 120),
+});
