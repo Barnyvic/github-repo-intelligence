@@ -81,5 +81,9 @@ projects:
                 value: production
               - key: NODE_VERSION
                 value: "20"
-              - key: NEXT_PUBLIC_API_BASE_URL
+              # Public API origin (no path), e.g. https://github-intelligence-api-xxxx.onrender.com
+              - key: API_ORIGIN
                 sync: false
+              # Browser calls same-origin /api/v1 (proxied via API_ORIGIN rewrite)
+              - key: NEXT_PUBLIC_API_BASE_URL
+                value: /api/v1
