@@ -1,0 +1,84 @@
+# Render Blueprint — deploy via Dashboard → New → Blueprint
+# After first deploy, set sync:false secrets in the Dashboard, then redeploy web.
+# Docs: https://render.com/docs/infrastructure-as-code
+
+projects:
+  - name: github-repo-intelligence
+    environments:
+      - name: production
+        databases:
+          - name: github-intelligence-db
+            plan: basic-256mb
+            databaseName: github_intelligence
+            postgresMajorVersion: "16"
+            region: oregon
+
+        services:
+          - type: keyvalue
+            name: github-intelligence-redis
+            plan: free
+            region: oregon
+            maxmemoryPolicy: allkeys-lru
+            ipAllowList: [] 
+
+          - type: web
+            name: github-intelligence-api
+            runtime: docker
+            plan: free
+            region: oregon
+            dockerfilePath: ./apps/api/Dockerfile
+            dockerContext: .
+            dockerCommand: sh -c "npx prisma migrate deploy && node dist/main.js"
+            healthCheckPath: /api/v1/health
+            autoDeployTrigger: commit
+            envVars:
+              - key: NODE_ENV
+                value: production
+              - key: API_PREFIX
+                value: api/v1
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: github-intelligence-db
+                  property: connectionString
+              - key: REDIS_URL
+                fromService:
+                  type: keyvalue
+                  name: github-intelligence-redis
+                  property: connectionString
+              - key: GITHUB_API_BASE_URL
+                value: https://api.github.com
+              - key: GITHUB_TIMEOUT_MS
+                value: "8000"
+              - key: GITHUB_RETRY_ATTEMPTS
+                value: "3"
+              - key: CACHE_TTL_REPOSITORY_SEARCH_SECONDS
+                value: "300"
+              - key: CACHE_TTL_REPOSITORY_DETAILS_SECONDS
+                value: "900"
+              - key: CACHE_TTL_DEVELOPER_PROFILE_SECONDS
+                value: "900"
+              - key: CACHE_TTL_REPOSITORY_ACTIVITY_SECONDS
+                value: "300"
+              - key: THROTTLE_TTL_SECONDS
+                value: "60"
+              - key: THROTTLE_LIMIT
+                value: "120"
+              - key: CORS_ORIGIN
+                sync: false
+              - key: GITHUB_TOKEN
+                sync: false
+
+          - type: web
+            name: github-intelligence-web
+            runtime: node
+            plan: free
+            region: oregon
+            rootDir: apps/web
+            buildCommand: npm install && npm run build
+            startCommand: npm run start
+            autoDeployTrigger: commit
+            envVars:
+              - key: NODE_ENV
+                value: production
+              - key: NEXT_PUBLIC_API_BASE_URL
+                sync: false
