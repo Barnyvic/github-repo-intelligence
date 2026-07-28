@@ -12,13 +12,18 @@ export class GithubApiClient {
   private readonly logger = new Logger(GithubApiClient.name);
   private readonly http: AxiosInstance;
   private readonly retryAttempts: number;
+  private readonly perAttemptTimeoutMs: number;
+  private readonly overallTimeoutMs = 20_000;
+  private readonly baseBackoffMs = 150;
+  private readonly maxBackoffMs = 2_000;
 
   constructor(config: ConfigService) {
     const token = config.get<string>('GITHUB_TOKEN');
     this.retryAttempts = config.get<number>('GITHUB_RETRY_ATTEMPTS', 3);
+    this.perAttemptTimeoutMs = config.get<number>('GITHUB_TIMEOUT_MS', 8000);
     this.http = axios.create({
       baseURL: config.get<string>('GITHUB_API_BASE_URL', 'https://api.github.com'),
-      timeout: config.get<number>('GITHUB_TIMEOUT_MS', 8000),
+      timeout: this.perAttemptTimeoutMs,
       headers: {
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
@@ -28,18 +33,29 @@ export class GithubApiClient {
   }
 
   async get<T>(path: string, params?: Record<string, unknown>): Promise<{ data: T; rateLimit: GithubRateLimit }> {
+    const deadline = Date.now() + this.overallTimeoutMs;
     let attempt = 0;
-    let lastError: unknown;
 
-    while (attempt <= this.retryAttempts) {
+    while (true) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        throw new GithubApiException(
+          'GitHub request exceeded the overall timeout.',
+          504,
+          { limit: '', remaining: '', reset: '' },
+        );
+      }
+
       try {
-        const response = await this.http.get<T>(path, { params });
+        const response = await this.http.get<T>(path, {
+          params,
+          timeout: Math.min(this.perAttemptTimeoutMs, remainingMs),
+        });
         return {
           data: response.data,
           rateLimit: this.rateLimitFromHeaders(response.headers),
         };
       } catch (error) {
-        lastError = error;
         const axiosError = error as AxiosError;
         const status = axiosError.response?.status;
         const rateLimit = this.rateLimitFromHeaders(axiosError.response?.headers ?? {});
@@ -48,18 +64,31 @@ export class GithubApiClient {
           throw new GithubRateLimitException(rateLimit);
         }
 
-        if (!this.shouldRetry(status) || attempt === this.retryAttempts) {
+        if (!this.shouldRetry(status) || attempt >= this.retryAttempts) {
           this.throwGithubError(axiosError, rateLimit);
         }
 
         attempt += 1;
-        const delayMs = 150 * 2 ** (attempt - 1);
+        const delayMs = this.computeBackoffMs(attempt);
+        const waitMs = Math.min(delayMs, deadline - Date.now());
+        if (waitMs <= 0) {
+          throw new GithubApiException(
+            'GitHub request exceeded the overall timeout.',
+            504,
+            rateLimit,
+          );
+        }
+
         this.logger.warn(`GitHub request retry ${attempt}/${this.retryAttempts} for ${path}`);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
       }
     }
+  }
 
-    throw lastError;
+  private computeBackoffMs(attempt: number): number {
+    const exponential = this.baseBackoffMs * 2 ** (attempt - 1);
+    const capped = Math.min(exponential, this.maxBackoffMs);
+    return Math.floor(capped * (0.5 + Math.random()));
   }
 
   private shouldRetry(status?: number): boolean {
